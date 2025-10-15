@@ -1,0 +1,11 @@
+Homework 3 - Scheduling App
+Name: Kenny Pham
+Partner: None
+
+Sources I used:
+* Class notes and examples from the lecture.
+* The official Node.js website for documentation.
+* AI to check my code.
+
+Who I worked with:
+I did this project by myself.

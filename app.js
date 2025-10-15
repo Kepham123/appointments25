@@ -1,6 +1,7 @@
-// Import required Node.js modules
 const http = require('http');
+const fs = require('fs');
 const url = require('url');
+const path = require('path');
 
 // Global data structures to hold appointment info
 const availableTimes = {
@@ -13,22 +14,19 @@ const availableTimes = {
 const appointments = [];
 
 /**
- * Schedules an appointment by removing the time from the available list
- * and adding a new record to the appointments list.
+ * Schedules an appointment.
  */
 function schedule(queryObj, res) {
     if (!queryObj.name || !queryObj.day || !queryObj.time) {
         return error(400, "Error: Missing name, day, or time parameter.", res);
     }
 
-    if (availableTimes[queryObj.day] && availableTimes[queryObj.day].some(element => element == queryObj.time)) {
+    if (availableTimes[queryObj.day] && availableTimes[queryObj.day].includes(queryObj.time)) {
         const timeIndex = availableTimes[queryObj.day].indexOf(queryObj.time);
         availableTimes[queryObj.day].splice(timeIndex, 1);
         appointments.push({ name: queryObj.name, day: queryObj.day, time: queryObj.time });
         console.log("Appointment Added! Current appointments:", appointments);
-        res.writeHead(200, { 'Content-Type': 'text/plain' });
-        res.write("Scheduled");
-        res.end();
+        sendResponse(res, 200, 'text/plain', "Scheduled");
     } else {
         const errorMessage = `Unable to schedule. The time slot on ${queryObj.day} at ${queryObj.time} is not available.`;
         error(400, errorMessage, res);
@@ -36,8 +34,7 @@ function schedule(queryObj, res) {
 }
 
 /**
- * Cancels an appointment by removing it from the appointments list
- * and adding the time back to the available list.
+ * Cancels an appointment.
  */
 function cancel(queryObj, res) {
     if (!queryObj.name || !queryObj.day || !queryObj.time) {
@@ -50,23 +47,20 @@ function cancel(queryObj, res) {
     );
 
     if (appointmentIndex !== -1) {
-        res.writeHead(200, { 'Content-Type': 'text/plain' });
-        res.write("Appointment has been canceled");
-        res.end();
-
         appointments.splice(appointmentIndex, 1);
         if (availableTimes[day]) {
             availableTimes[day].push(time);
             availableTimes[day].sort();
         }
         console.log("Appointment Canceled! Current appointments:", appointments);
+        sendResponse(res, 200, 'text/plain', "Appointment has been canceled");
     } else {
         error(404, "Appointment not found.", res);
     }
 }
 
 /**
- * Checks if a time slot is available without booking it.
+ * Checks if a time slot is available.
  */
 function check(queryObj, res) {
     if (!queryObj.day || !queryObj.time) {
@@ -74,45 +68,90 @@ function check(queryObj, res) {
     }
     
     if (availableTimes[queryObj.day] && availableTimes[queryObj.day].includes(queryObj.time)) {
-        res.writeHead(200, { 'Content-Type': 'text/plain' });
-        res.end(`The time slot on ${queryObj.day} at ${queryObj.time} is available.`);
+        sendResponse(res, 200, 'text/plain', `The time slot on ${queryObj.day} at ${queryObj.time} is available.`);
     } else {
-        res.writeHead(200, { 'Content-Type': 'text/plain' });
-        res.end(`The time slot on ${queryObj.day} at ${queryObj.time} is NOT available.`);
+        sendResponse(res, 200, 'text/plain', `The time slot on ${queryObj.day} at ${queryObj.time} is NOT available.`);
     }
 }
 
 /**
- * A helper function to send an error response with a status and message.
+ * A helper function to send an error response.
  */
 function error(status, message, res) {
-    res.writeHead(status, { 'Content-Type': 'text/plain' });
-    res.write(message);
-    res.end();
+    sendResponse(res, status, 'text/plain', message);
 }
 
-// Create the main server and define the router logic
-let myserver = http.createServer(function (req, res) {
-    let urlObj = url.parse(req.url, true);
-    console.log("Request received for:", req.url);
-    
-    // Router to direct requests to the correct function
-    switch (urlObj.pathname) {
-        case "/schedule":
-            schedule(urlObj.query, res);
-            break;
-        case "/cancel":
-            cancel(urlObj.query, res);
-            break;
-        case "/check":
-            check(urlObj.query, res);
-            break;
-        default:
-            error(404, "Error: Path name not found", res);
+/**
+ * A helper function to send a complete response. 
+ */
+function sendResponse(res, statusCode, contentType, content) {
+    res.writeHead(statusCode, {'Content-Type': contentType});
+    res.end(content);
+}
+
+/**
+ * Gets the content type based on the file extension. 
+ */
+function getContentType(filePath) {
+    const ext = path.extname(filePath).toLowerCase();
+    switch (ext) {
+        case '.html': return 'text/html';
+        case '.css': return 'text/css';
+        case '.js': return 'application/javascript';
+        case '.png': return 'image/png';
+        case '.jpg':
+        case '.jpeg': return 'image/jpeg';
+        default: return 'application/octet-stream'; // Default for unknown types
     }
+}
+
+/**
+ * Reads a file and sends it to the client. 
+ */
+function sendFile(filePath, res) {
+    const contentType = getContentType(filePath);
+    fs.readFile(filePath, (err, content) => {
+        if (err) {
+            error(404, 'File not found', res);
+        } else {
+            sendResponse(res, 200, contentType, content);
+        }
+    });
+}
+
+/**
+ * Main server callback function to handle all requests.
+ */
+const server = http.createServer((req, res) => {
+    console.log(`Request received for: ${req.url}`); // 
+    
+    const parsedUrl = url.parse(req.url, true);
+    let pathname = parsedUrl.pathname;
+    const query = parsedUrl.query;
+
+    // API Routing
+    if (pathname === '/schedule') {
+        schedule(query, res);
+        return;
+    } else if (pathname === '/cancel') {
+        cancel(query, res);
+        return;
+    } else if (pathname === '/check') {
+        check(query, res);
+        return;
+    }
+    
+    // Serve index.html by default 
+    if (pathname === '/') {
+        pathname = '/index.html';
+    }
+    
+    // Serve static files from the public_html directory
+    const filePath = path.join(__dirname, 'public_html', pathname);
+    sendFile(filePath, res);
 });
 
-// Start the server and have it listen for requests on port 80
-myserver.listen(80, () => {
-    console.log('Server is running on port 80');
+const port = 80;
+server.listen(port, () => {
+    console.log(`Server listening on port ${port}`);
 });

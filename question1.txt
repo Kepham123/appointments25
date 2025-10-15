@@ -1,0 +1,5 @@
+Here's what `..` and `-R` mean:
+
+* `..` (dot-dot): This is a shortcut for the **parent folder**. It just means "go up one level" from the folder you're currently in.
+
+* `-R` (dash R): This stands for **recursive**. It tells the copy command (`cp`) to grab a whole folder and **everything inside it**—all its files and any other folders.
